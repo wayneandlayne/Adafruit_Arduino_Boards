@@ -64,6 +64,7 @@ uint16_t RxLEDPulse = 0; // time remaining for Rx LED pulse
 /* Bootloader timeout timer */
 #define TIMEOUT_PERIOD	8000
 uint16_t Timeout = 0;
+uint16_t TimeoutPeriod = 0;
 
 uint16_t bootKey = 0x7777;
 volatile uint16_t *const bootKeyPtr = (volatile uint16_t *)0x0800;
@@ -138,14 +139,20 @@ int main(void)
 	/* Enable global interrupts so that the USB stack can function */
 	sei();
 	
+	// W&L: Use default 8000 ms timeout unless A0 (PF7) is grounded, then use a 4000 ms timeout.
+	// This is just for testing, eventually we'll use like 5 ms if A0 is grounded.
 	Timeout = 0;
+	TimeoutPeriod = TIMEOUT_PERIOD;
+	if (0 == (PORTF & (1<<7))) {
+		TimeoutPeriod = 4000; // milliseconds
+	}
 	
 	while (RunBootloader)
 	{
 		CDC_Task();
 		USB_USBTask();
 		/* Time out and start the sketch if one is present */
-		if (Timeout > TIMEOUT_PERIOD)
+		if (Timeout > TimeoutPeriod)
 			RunBootloader = false;
 
 		LEDPulse();
@@ -177,6 +184,11 @@ void SetupHardware(void)
 	L_LED_OFF();
 	TX_LED_OFF();
 	RX_LED_OFF();
+	
+	// W&L: Set up A0 as input (PF7), with internal pullup
+	DDRF &= ~(1<<7); // DDR bit set 0 means input in AVR world, so clear bit 7
+	PORTF |= (1<<7); // Enable the pull-up
+	
 	
 	/* Initialize TIMER1 to handle bootloader timeout and LED tasks.  
 	 * With 16 MHz clock and 1/64 prescaler, timer 1 is clocked at 250 kHz
